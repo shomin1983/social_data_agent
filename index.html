@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>旅行日記 Agent Prototype</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="hero-banner" aria-label="旅行日記 Agent">
+        <h1>旅行日記 Agent</h1>
+      </section>
+
+      <section class="screen active" id="importScreen" aria-label="加入旅行素材">
+        <div class="screen-grid import-grid">
+          <div class="copy-block">
+            <div class="helper-bot" aria-hidden="true">
+              <span class="bot-head"><i></i></span>
+              <span class="bot-body"></span>
+              <span class="bot-spark one"></span>
+              <span class="bot-spark two"></span>
+            </div>
+            <h2>哇，相簿裡有滿滿的精彩照片，親愛的需要我幫你整理整理嗎？</h2>
+            <div class="action-row">
+              <button class="primary-action" id="loadAssets" type="button">加入旅行素材</button>
+            </div>
+          </div>
+
+          <div class="media-stage">
+            <div class="asset-count" id="assetCount">0 items</div>
+            <div class="asset-grid" id="assetGrid" aria-live="polite">
+              <div class="empty-state">尚未加入任何檔案</div>
+            </div>
+            <button class="secondary-action analyze-action" id="startAnalysis" type="button" disabled>開始分析</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="analysisScreen" aria-label="整理旅行內容">
+        <div class="screen-grid analysis-grid">
+          <div class="sequence-panel">
+            <div class="sequence-row" data-step="0">
+              <span class="pulse-dot"></span>
+              <p>讀取照片與短片</p>
+            </div>
+            <div class="sequence-row" data-step="1">
+              <span class="pulse-dot"></span>
+              <p>辨識出雷門、淺草寺、東京鐵塔</p>
+            </div>
+            <div class="sequence-row" data-step="2">
+              <span class="pulse-dot"></span>
+              <p>挑選精華片段與首圖</p>
+            </div>
+            <div class="sequence-row" data-step="3">
+              <span class="pulse-dot"></span>
+              <p>生成 IG、Threads、Reels 版本</p>
+            </div>
+            <div class="sequence-row" data-step="4">
+              <span class="pulse-dot"></span>
+              <p>整理 hashtag 與配樂情緒</p>
+            </div>
+          </div>
+
+          <div class="analysis-stage">
+            <h2 id="analysisTitle">準備開始整理</h2>
+            <p id="analysisMessage">按下開始後，系統會一步一步把東京旅遊素材整理成社群內容。</p>
+            <div class="progress-shell" aria-label="分析進度">
+              <div><i id="progressBar"></i></div>
+              <span id="progressLabel">0%</span>
+            </div>
+            <div class="live-preview" id="livePreview">
+              <span>Tokyo memories</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="outputScreen" aria-label="社群輸出">
+        <div class="screen-grid output-grid">
+          <div class="phone-preview" aria-label="手機預覽">
+            <div class="phone-top"></div>
+            <div class="phone-screen">
+              <div id="phoneContent"></div>
+            </div>
+          </div>
+
+          <div class="output-stage">
+            <h2>可以發布的內容已完成</h2>
+            <div class="tabs" role="tablist" aria-label="輸出平台">
+              <button class="tab active" type="button" data-output="ig">IG</button>
+              <button class="tab" type="button" data-output="threads">Threads</button>
+              <button class="tab" type="button" data-output="reels">Reels</button>
+            </div>
+
+            <article class="output-card" id="outputCard"></article>
+            <section class="support-card" id="supportCard" aria-label="發布輔助"></section>
+            <button class="floating-ai" id="addPerfectCorp" type="button">AI</button>
+            <div class="ai-dialog" id="aiDialog" aria-live="polite">
+              <div class="ai-message assistant">有什麼需要我幫你調整的</div>
+              <form class="ai-form" id="aiForm">
+                <input id="aiInput" type="text" />
+                <button type="submit">送出</button>
+              </form>
+            </div>
+            <div class="action-row">
+              <button class="secondary-action" id="restart" type="button">重新開始</button>
+              <button class="primary-action" id="regenerate" type="button">重新生成</button>
+              <button class="publish-action" id="publish" type="button">發布</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
