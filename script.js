@@ -113,6 +113,13 @@ let analyzed = false;
 let activeOutput = "ig";
 let variation = 0;
 let extraHashtagAdded = false;
+let hashtagAnimationPending = false;
+let publishing = false;
+let assetLoading = false;
+let assetRevealRun = 0;
+let reelFinalCaption = "城市開始發光";
+let reelTextAnimating = false;
+let reelPreviewLoading = false;
 
 const els = {
   screens: [...document.querySelectorAll(".screen")],
@@ -129,7 +136,6 @@ const els = {
   progressLabel: document.querySelector("#progressLabel"),
   progressBar: document.querySelector("#progressBar"),
   livePreview: document.querySelector("#livePreview"),
-  regenerate: document.querySelector("#regenerate"),
   restart: document.querySelector("#restart"),
   tabs: [...document.querySelectorAll(".tab")],
   outputCard: document.querySelector("#outputCard"),
@@ -137,10 +143,17 @@ const els = {
   phoneContent: document.querySelector("#phoneContent"),
   publish: document.querySelector("#publish"),
   addPerfectCorp: document.querySelector("#addPerfectCorp"),
+  aiClose: document.querySelector("#aiClose"),
   aiDialog: document.querySelector("#aiDialog"),
   aiForm: document.querySelector("#aiForm"),
   aiInput: document.querySelector("#aiInput"),
+  entryLoader: document.querySelector("#entryLoader"),
 };
+
+window.setTimeout(() => {
+  document.body.classList.remove("app-loading");
+  els.entryLoader?.classList.add("hidden");
+}, 1500);
 
 function showScreen(screen) {
   els.screens.forEach((item) => item.classList.toggle("active", item === screen));
@@ -160,19 +173,36 @@ function setProgress(percent) {
   els.progressBar.style.width = `${percent}%`;
 }
 
-function renderAssets() {
-  els.assetGrid.innerHTML = assets
-    .map(
-      (asset) => `
-        <article class="asset-card" style="background-image:${assetBackground(asset)}; background-position:${assetPosition(asset)}" aria-label="${asset.title}">
-          <b>${asset.type === "video" ? "Video" : "Photo"}</b>
-        </article>
-      `,
-    )
-    .join("");
-  els.assetCount.textContent = `${assets.length} items`;
-  els.startAnalysis.disabled = false;
+function assetCardMarkup(asset) {
+  return `
+    <article class="asset-card revealing" style="background-image:${assetBackground(asset)}; background-position:${assetPosition(asset)}" aria-label="${asset.title}">
+      <b>${asset.type === "video" ? "Video" : "Photo"}</b>
+    </article>
+  `;
+}
+
+async function renderAssets() {
+  if (assetLoading || loaded) return;
+  assetLoading = true;
+  loaded = false;
+  assetRevealRun += 1;
+  const runId = assetRevealRun;
+  els.loadAssets.disabled = true;
+  els.startAnalysis.disabled = true;
+  els.assetGrid.innerHTML = "";
+  els.assetCount.textContent = "0 items";
+
+  for (let index = 0; index < assets.length; index += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    if (runId !== assetRevealRun) return;
+    els.assetGrid.insertAdjacentHTML("beforeend", assetCardMarkup(assets[index]));
+    els.assetCount.textContent = `${index + 1} items`;
+  }
+
   loaded = true;
+  assetLoading = false;
+  els.loadAssets.disabled = false;
+  els.startAnalysis.disabled = false;
 }
 
 function currentOutput() {
@@ -193,6 +223,25 @@ function splitBody(output) {
   return output.body.split("\n").filter((line) => line.trim());
 }
 
+function escapeHtml(value) {
+  return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+}
+
+function reelScriptLines(output) {
+  const safeFinalCaption = escapeHtml(reelFinalCaption);
+  return splitBody(output).map((line, index) =>
+    index === 2 ? line.replace(/字幕「[^」]*」/, `字幕「${safeFinalCaption}」`) : line,
+  );
+}
+
+function reelCaptionFromPrompt(value) {
+  const marker = "改成";
+  const markerIndex = value.lastIndexOf(marker);
+  if (markerIndex === -1) return value;
+  const caption = value.slice(markerIndex + marker.length).trim();
+  return caption || value;
+}
+
 function assetBackground(asset) {
   return `url(${asset.image})`;
 }
@@ -205,11 +254,15 @@ function supportOutput(type) {
   return outputSets[variation][type];
 }
 
+function musicPreviewLine() {
+  return supportOutput("music").preview.replace("配樂情緒：", "配樂建議：");
+}
+
 function hashtagChips() {
   const tags = supportOutput("hashtags").preview.split(" ").filter((tag) => tag.startsWith("#"));
   if (extraHashtagAdded && !tags.includes("#PerfectCorp")) tags.push("#PerfectCorp");
   return tags
-    .map((tag) => `<span>${tag}</span>`)
+    .map((tag) => `<span class="${tag === "#PerfectCorp" && hashtagAnimationPending ? "hashtag-pop" : ""}">${tag}</span>`)
     .join("");
 }
 
@@ -219,6 +272,7 @@ function hashtagPreview() {
 }
 
 function renderIgLayout(output) {
+  const composerAssets = [assets[0], assets[1], assets[3], assets[2]];
   return `
     <div class="platform-layout ig-layout">
       <div class="layout-head">
@@ -230,8 +284,7 @@ function renderIgLayout(output) {
       </div>
       <div class="ig-composer">
         <div class="ig-grid">
-          ${assets
-            .slice(0, 4)
+          ${composerAssets
             .map((asset) => `<span style="background-image:${assetBackground(asset)}; background-position:${assetPosition(asset)}"></span>`)
             .join("")}
         </div>
@@ -241,11 +294,6 @@ function renderIgLayout(output) {
             .join("")}
           <div class="inline-hashtags">${hashtagChips()}</div>
         </div>
-      </div>
-      <div class="layout-notes">
-        <span>首圖：雷門合照</span>
-        <span>第二張：淺草寺參道</span>
-        <span>收尾：東京鐵塔夜景</span>
       </div>
     </div>
   `;
@@ -287,7 +335,7 @@ function renderThreadsLayout(output) {
 }
 
 function renderReelsLayout(output) {
-  const lines = splitBody(output);
+  const lines = reelScriptLines(output);
   const reelAssets = [assets[0], assets[3], assets[2]];
   return `
     <div class="platform-layout reels-layout">
@@ -296,6 +344,7 @@ function renderReelsLayout(output) {
         <div>
           <h3>${output.title}</h3>
           <p>短影音分鏡 + 字幕節奏</p>
+          <p class="music-line">${musicPreviewLine()}</p>
         </div>
       </div>
       <div class="reel-board">
@@ -304,12 +353,11 @@ function renderReelsLayout(output) {
             const [time, text] = line.split("：");
             const asset = reelAssets[index] || assets[0];
             return `
-              <article class="reel-scene">
+              <article class="reel-scene ${index === 2 && reelTextAnimating ? "reel-updated" : ""}">
                 <div class="scene-thumb" style="background-image:${assetBackground(asset)}; background-position:${assetPosition(asset)}"></div>
                 <div>
                   <b>${time}</b>
                   <p>${text || line}</p>
-                  ${index === lines.length - 1 ? `<div class="inline-hashtags">${hashtagChips()}</div>` : ""}
                 </div>
               </article>
             `;
@@ -368,10 +416,10 @@ function renderSupportPanel() {
 }
 
 function renderPhoneIg(output) {
+  const thumbAssets = [assets[1], assets[3], assets[2]];
   return `
     <div class="phone-appbar">
       <span>IG 貼文</span>
-      <b>AI</b>
     </div>
     <div class="phone-ig-post">
       <div class="phone-ig-profile">
@@ -381,8 +429,7 @@ function renderPhoneIg(output) {
       <div class="phone-media phone-ig" style="background-image:${assetBackground(assets[0])}; background-position:${assetPosition(assets[0])}"></div>
       <div class="phone-actions">♡ ◇ ↗</div>
       <div class="phone-thumbs">
-        ${assets
-          .slice(1, 4)
+        ${thumbAssets
           .map((asset) => `<span class="phone-thumb" style="background-image:${assetBackground(asset)}; background-position:${assetPosition(asset)}"></span>`)
           .join("")}
       </div>
@@ -419,13 +466,23 @@ function renderPhoneThreads(output) {
 }
 
 function renderPhoneReels(output) {
-  const reelCaption =
-    variation === 0
-      ? "雷門、東京鐵塔、淺草寺，10 秒收進今天最亮的東京。"
-      : "從雷門走到東京鐵塔，再把回憶收進淺草的光。";
+  const safeFinalCaption = escapeHtml(reelFinalCaption);
   return `
-    <div class="phone-reel-screen" style="background-image:${assetBackground(assets[2])}; background-position:${assetPosition(assets[2])}">
-      <div class="phone-reel-top">Reels</div>
+    <div class="phone-reel-screen">
+      ${reelPreviewLoading ? '<div class="phone-reel-loading"><i></i><span>重新生成 Reels</span></div>' : ""}
+      <div class="phone-reel-progress" aria-hidden="true"><span></span></div>
+      <div class="phone-reel-video" aria-label="Reels 10 秒模擬播放">
+        <div class="phone-reel-shot shot-one" style="background-image:${assetBackground(assets[0])}; background-position:${assetPosition(assets[0])}"></div>
+        <div class="phone-reel-shot shot-two" style="background-image:${assetBackground(assets[3])}; background-position:${assetPosition(assets[3])}"></div>
+        <div class="phone-reel-shot shot-three" style="background-image:${assetBackground(assets[2])}; background-position:${assetPosition(assets[2])}"></div>
+        <div class="phone-reel-copy copy-one">東京第一站</div>
+        <div class="phone-reel-copy copy-two">把今天留在東京的光裡</div>
+        <div class="phone-reel-copy copy-three">${safeFinalCaption}</div>
+      </div>
+      <div class="phone-reel-top">
+        <span>Reels</span>
+        <i>播放中</i>
+      </div>
       <div class="phone-reel-side">
         <span>♡</span>
         <span>💬</span>
@@ -433,8 +490,6 @@ function renderPhoneReels(output) {
       </div>
       <div class="phone-reel-caption">
         <b>東京 10 秒日記</b>
-        <p>${reelCaption}</p>
-        <div class="phone-hashtags">${hashtagChips()}</div>
       </div>
     </div>
   `;
@@ -472,10 +527,12 @@ function updateOutput() {
   els.outputCard.className = `output-card output-${activeOutput}`;
   els.outputCard.innerHTML = renderOutputLayout(output);
   els.supportCard.innerHTML = renderSupportPanel();
-  els.supportCard.hidden = activeOutput === "threads";
-  els.addPerfectCorp.hidden = activeOutput === "threads";
-  if (activeOutput === "threads") els.aiDialog.classList.remove("open");
+  els.supportCard.hidden = ["ig", "threads", "reels"].includes(activeOutput);
+  els.addPerfectCorp.hidden = false;
   updatePhonePreview(output);
+  publishing = false;
+  els.publish.classList.remove("publishing");
+  els.publish.disabled = false;
   els.publish.textContent = "發布";
 }
 
@@ -513,13 +570,20 @@ async function runAnalysis() {
 function resetPrototype() {
   loaded = false;
   analyzed = false;
+  assetLoading = false;
+  assetRevealRun += 1;
   activeOutput = "ig";
   variation = 0;
   extraHashtagAdded = false;
+  hashtagAnimationPending = false;
+  reelFinalCaption = "城市開始發光";
+  reelTextAnimating = false;
+  reelPreviewLoading = false;
   els.aiDialog.classList.remove("open");
   els.aiDialog.querySelectorAll(".ai-message.user, .ai-message.confirm").forEach((message) => message.remove());
   els.assetCount.textContent = "0 items";
   els.assetGrid.innerHTML = '<div class="empty-state">尚未加入任何檔案</div>';
+  els.loadAssets.disabled = false;
   els.startAnalysis.disabled = true;
   els.tabs.forEach((item) => item.classList.toggle("active", item.dataset.output === "ig"));
   setProgress(0);
@@ -531,19 +595,27 @@ els.loadAssets.addEventListener("click", renderAssets);
 els.startAnalysis.addEventListener("click", runAnalysis);
 els.restart.addEventListener("click", resetPrototype);
 
-els.regenerate.addEventListener("click", () => {
-  if (!analyzed) return;
-  variation = (variation + 1) % outputSets.length;
-  updateOutput();
-});
-
 els.publish.addEventListener("click", () => {
-  els.publish.textContent = "已發布";
+  if (publishing) return;
+  publishing = true;
+  els.publish.disabled = true;
+  els.publish.classList.add("publishing");
+  els.publish.textContent = "發布中";
+  window.setTimeout(() => {
+    publishing = false;
+    els.publish.classList.remove("publishing");
+    els.publish.disabled = false;
+    els.publish.textContent = "已發布";
+  }, 2000);
 });
 
 els.addPerfectCorp.addEventListener("click", () => {
   els.aiDialog.classList.toggle("open");
   if (els.aiDialog.classList.contains("open")) els.aiInput.focus();
+});
+
+els.aiClose.addEventListener("click", () => {
+  els.aiDialog.classList.remove("open");
 });
 
 els.aiForm.addEventListener("submit", (event) => {
@@ -552,15 +624,39 @@ els.aiForm.addEventListener("submit", (event) => {
   if (!value) return;
 
   els.aiDialog.insertBefore(messageElement(value, "user"), els.aiForm);
-  if (value.includes("#PerfectCorp")) {
-    extraHashtagAdded = true;
+  scrollAiDialogToBottom();
+  if (activeOutput === "reels") {
+    reelFinalCaption = reelCaptionFromPrompt(value);
+    reelTextAnimating = true;
+    reelPreviewLoading = true;
     updateOutput();
     els.aiDialog.classList.add("open");
-    els.addPerfectCorp.textContent = "AI";
+    window.setTimeout(() => {
+      reelPreviewLoading = false;
+      updateOutput();
+      els.aiDialog.classList.add("open");
+      scrollAiDialogToBottom();
+    }, 2000);
+    window.setTimeout(() => {
+      reelTextAnimating = false;
+      document.querySelectorAll(".reel-updated").forEach((item) => item.classList.remove("reel-updated"));
+    }, 2000);
+    els.aiDialog.insertBefore(messageElement("已更新 Reels 最後一段文案，右側影片會從頭重新播放", "confirm"), els.aiForm);
+    scrollAiDialogToBottom();
+  } else if (value.includes("#PerfectCorp")) {
+    extraHashtagAdded = true;
+    hashtagAnimationPending = true;
+    updateOutput();
+    els.aiDialog.classList.add("open");
+    window.setTimeout(() => {
+      hashtagAnimationPending = false;
+      document.querySelectorAll(".hashtag-pop").forEach((item) => item.classList.remove("hashtag-pop"));
+    }, 950);
     els.aiDialog.insertBefore(
       messageElement("這是一個很棒的 HashTag，我已經幫你加到文案裡了", "confirm"),
       els.aiForm,
     );
+    scrollAiDialogToBottom();
   }
   els.aiInput.value = "";
 });
@@ -570,6 +666,12 @@ function messageElement(text, type) {
   message.className = `ai-message ${type}`;
   message.textContent = text;
   return message;
+}
+
+function scrollAiDialogToBottom() {
+  window.requestAnimationFrame(() => {
+    els.aiDialog.scrollTop = els.aiDialog.scrollHeight;
+  });
 }
 
 els.tabs.forEach((tab) => {
