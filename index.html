@@ -10,6 +10,7 @@
     <main class="app-shell">
       <section class="hero-banner" aria-label="旅行日記">
         <h1>旅行日記</h1>
+        <img class="hero-banner-bot" src="assets/banner-bot-camera.png" alt="" aria-hidden="true" />
       </section>
 
       <div class="entry-loader" id="entryLoader" role="status" aria-live="polite">
@@ -21,19 +22,16 @@
         <div class="screen-grid import-grid">
           <div class="copy-block">
             <div class="helper-bot" aria-hidden="true">
-              <span class="bot-head"><i></i></span>
-              <span class="bot-body"></span>
-              <span class="bot-spark one"></span>
-              <span class="bot-spark two"></span>
+              <img src="assets/helper-bot-laptop.png" alt="" />
             </div>
-            <h2>哇，相簿裡有滿滿的精彩照片<br />親愛的需要我幫你整理整理嗎？</h2>
+            <h2>哇，相簿裡有滿滿的精彩照片<br />需要日記小助手幫你整理整理嗎？</h2>
             <div class="action-row">
               <button class="primary-action" id="loadAssets" type="button">加入旅行素材</button>
             </div>
           </div>
 
           <div class="media-stage">
-            <div class="asset-count" id="assetCount">0 items</div>
+            <div class="asset-count" id="assetCount">0 個檔案</div>
             <div class="asset-grid" id="assetGrid" aria-live="polite">
               <div class="empty-state">尚未加入任何檔案</div>
             </div>
@@ -116,9 +114,14 @@
                 </svg>
               </span>
             </button>
-            <div class="ai-dialog" id="aiDialog" aria-live="polite">
-              <button class="ai-close" id="aiClose" type="button" aria-label="關閉對話">×</button>
-              <div class="ai-message assistant">有什麼需要我幫你調整的</div>
+            <div class="ai-dialog" id="aiDialog" aria-live="polite" aria-label="Agent Chat">
+              <div class="ai-header">
+                <h2>Agent Chat</h2>
+                <button class="ai-close" id="aiClose" type="button" aria-label="關閉對話">×</button>
+              </div>
+              <div class="ai-messages" id="aiMessages">
+                <div class="ai-message assistant">有什麼我可以幫你的？</div>
+              </div>
               <form class="ai-form" id="aiForm">
                 <input id="aiInput" type="text" />
                 <button type="submit">送出</button>
@@ -129,6 +132,6 @@
       </section>
     </main>
 
-    <script src="script.js?v=ai-hashtag-pop"></script>
+    <script src="script.js?v=reels-performance"></script>
   </body>
 </html>

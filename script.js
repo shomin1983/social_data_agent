@@ -43,6 +43,12 @@ const assets = [
   },
 ];
 
+const reelPreviewAssets = [
+  { image: "assets/travel/reels-kaminarimon.jpg", position: assets[0].position },
+  { image: "assets/travel/reels-sensoji.jpg", position: assets[3].position },
+  { image: "assets/travel/reels-tokyo-tower.jpg", position: assets[2].position },
+];
+
 const outputSets = [
   {
     ig: {
@@ -120,6 +126,7 @@ let assetRevealRun = 0;
 let reelFinalCaption = "城市開始發光";
 let reelTextAnimating = false;
 let reelPreviewLoading = false;
+let analysisRun = 0;
 
 const els = {
   screens: [...document.querySelectorAll(".screen")],
@@ -145,6 +152,7 @@ const els = {
   addPerfectCorp: document.querySelector("#addPerfectCorp"),
   aiClose: document.querySelector("#aiClose"),
   aiDialog: document.querySelector("#aiDialog"),
+  aiMessages: document.querySelector("#aiMessages"),
   aiForm: document.querySelector("#aiForm"),
   aiInput: document.querySelector("#aiInput"),
   entryLoader: document.querySelector("#entryLoader"),
@@ -169,14 +177,27 @@ function setSequence(stepIndex) {
 }
 
 function setProgress(percent) {
-  els.progressLabel.textContent = `${percent}%`;
-  els.progressBar.style.width = `${percent}%`;
+  const normalizedPercent = Math.max(0, Math.min(100, percent));
+  els.progressLabel.textContent = `${Math.round(normalizedPercent)}%`;
+  els.progressBar.style.width = `${normalizedPercent}%`;
+}
+
+function setAnalysisStep(stepIndex) {
+  const step = analysisSteps[stepIndex];
+  if (!step) return;
+
+  setSequence(stepIndex);
+  els.analysisTitle.textContent = step.title;
+  els.analysisMessage.textContent = step.message;
+  els.livePreview.style.backgroundImage = assets[step.media] ? assetBackground(assets[step.media]) : "";
+  els.livePreview.style.backgroundPosition = assets[step.media] ? assetPosition(assets[step.media]) : "";
+  els.livePreview.textContent = assets[step.media]?.title || "Tokyo memories";
 }
 
 function assetCardMarkup(asset) {
   return `
     <article class="asset-card revealing" style="background-image:${assetBackground(asset)}; background-position:${assetPosition(asset)}" aria-label="${asset.title}">
-      <b>${asset.type === "video" ? "Video" : "Photo"}</b>
+      <b>${asset.type === "video" ? "影片" : "圖片"}</b>
     </article>
   `;
 }
@@ -190,13 +211,13 @@ async function renderAssets() {
   els.loadAssets.disabled = true;
   els.startAnalysis.disabled = true;
   els.assetGrid.innerHTML = "";
-  els.assetCount.textContent = "0 items";
+  els.assetCount.textContent = "0 個檔案";
 
   for (let index = 0; index < assets.length; index += 1) {
     await new Promise((resolve) => setTimeout(resolve, 500));
     if (runId !== assetRevealRun) return;
     els.assetGrid.insertAdjacentHTML("beforeend", assetCardMarkup(assets[index]));
-    els.assetCount.textContent = `${index + 1} items`;
+    els.assetCount.textContent = `${index + 1} 個檔案`;
   }
 
   loaded = true;
@@ -472,9 +493,9 @@ function renderPhoneReels(output) {
       ${reelPreviewLoading ? '<div class="phone-reel-loading"><i></i><span>重新生成 Reels</span></div>' : ""}
       <div class="phone-reel-progress" aria-hidden="true"><span></span></div>
       <div class="phone-reel-video" aria-label="Reels 10 秒模擬播放">
-        <div class="phone-reel-shot shot-one" style="background-image:${assetBackground(assets[0])}; background-position:${assetPosition(assets[0])}"></div>
-        <div class="phone-reel-shot shot-two" style="background-image:${assetBackground(assets[3])}; background-position:${assetPosition(assets[3])}"></div>
-        <div class="phone-reel-shot shot-three" style="background-image:${assetBackground(assets[2])}; background-position:${assetPosition(assets[2])}"></div>
+        <div class="phone-reel-shot shot-one" style="background-image:${assetBackground(reelPreviewAssets[0])}; background-position:${assetPosition(reelPreviewAssets[0])}"></div>
+        <div class="phone-reel-shot shot-two" style="background-image:${assetBackground(reelPreviewAssets[1])}; background-position:${assetPosition(reelPreviewAssets[1])}"></div>
+        <div class="phone-reel-shot shot-three" style="background-image:${assetBackground(reelPreviewAssets[2])}; background-position:${assetPosition(reelPreviewAssets[2])}"></div>
         <div class="phone-reel-copy copy-one">東京第一站</div>
         <div class="phone-reel-copy copy-two">把今天留在東京的光裡</div>
         <div class="phone-reel-copy copy-three">${safeFinalCaption}</div>
@@ -540,34 +561,64 @@ function finishAnalysis() {
   analyzed = true;
   setSequence(5);
   updateOutput();
-  window.setTimeout(() => showScreen(els.outputScreen), 520);
+  window.setTimeout(() => showScreen(els.outputScreen), 2000);
 }
 
 async function runAnalysis() {
   if (!loaded) return;
+  analysisRun += 1;
+  const runId = analysisRun;
   analyzed = false;
   els.startAnalysis.disabled = true;
   showScreen(els.analysisScreen);
   setProgress(0);
   setSequence(0);
+  setAnalysisStep(0);
 
-  for (let index = 0; index < analysisSteps.length; index += 1) {
-    const step = analysisSteps[index];
-    setSequence(index);
-    setProgress(step.percent);
-    els.analysisTitle.textContent = step.title;
-    els.analysisMessage.textContent = step.message;
-    els.livePreview.style.backgroundImage = assets[step.media] ? assetBackground(assets[step.media]) : "";
-    els.livePreview.style.backgroundPosition = assets[step.media] ? assetPosition(assets[step.media]) : "";
-    els.livePreview.textContent = assets[step.media]?.title || "Tokyo memories";
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-  }
+  const totalDuration = 10000;
+  const stepDuration = totalDuration / analysisSteps.length;
+
+  await new Promise((resolve) => {
+    const startTime = performance.now();
+    let activeStep = 0;
+
+    function tick(now) {
+      if (runId !== analysisRun) {
+        resolve();
+        return;
+      }
+
+      const elapsed = Math.min(now - startTime, totalDuration);
+      const progress = (elapsed / totalDuration) * 100;
+      const nextStep = Math.min(analysisSteps.length - 1, Math.floor(elapsed / stepDuration));
+
+      if (nextStep !== activeStep) {
+        activeStep = nextStep;
+        setAnalysisStep(activeStep);
+      }
+
+      setProgress(progress);
+
+      if (elapsed < totalDuration) {
+        window.requestAnimationFrame(tick);
+        return;
+      }
+
+      setProgress(100);
+      resolve();
+    }
+
+    window.requestAnimationFrame(tick);
+  });
+
+  if (runId !== analysisRun) return;
 
   finishAnalysis();
   els.startAnalysis.disabled = false;
 }
 
 function resetPrototype() {
+  analysisRun += 1;
   loaded = false;
   analyzed = false;
   assetLoading = false;
@@ -580,8 +631,8 @@ function resetPrototype() {
   reelTextAnimating = false;
   reelPreviewLoading = false;
   els.aiDialog.classList.remove("open");
-  els.aiDialog.querySelectorAll(".ai-message.user, .ai-message.confirm").forEach((message) => message.remove());
-  els.assetCount.textContent = "0 items";
+  els.aiMessages.querySelectorAll(".ai-message.user, .ai-message.confirm").forEach((message) => message.remove());
+  els.assetCount.textContent = "0 個檔案";
   els.assetGrid.innerHTML = '<div class="empty-state">尚未加入任何檔案</div>';
   els.loadAssets.disabled = false;
   els.startAnalysis.disabled = true;
@@ -623,7 +674,7 @@ els.aiForm.addEventListener("submit", (event) => {
   const value = els.aiInput.value.trim();
   if (!value) return;
 
-  els.aiDialog.insertBefore(messageElement(value, "user"), els.aiForm);
+  els.aiMessages.append(messageElement(value, "user"));
   scrollAiDialogToBottom();
   if (activeOutput === "reels") {
     reelFinalCaption = reelCaptionFromPrompt(value);
@@ -641,7 +692,7 @@ els.aiForm.addEventListener("submit", (event) => {
       reelTextAnimating = false;
       document.querySelectorAll(".reel-updated").forEach((item) => item.classList.remove("reel-updated"));
     }, 2000);
-    els.aiDialog.insertBefore(messageElement("已更新 Reels 最後一段文案，右側影片會從頭重新播放", "confirm"), els.aiForm);
+    els.aiMessages.append(messageElement("已更新 Reels 最後一段文案，右側影片會從頭重新播放", "confirm"));
     scrollAiDialogToBottom();
   } else if (value.includes("#PerfectCorp")) {
     extraHashtagAdded = true;
@@ -652,10 +703,7 @@ els.aiForm.addEventListener("submit", (event) => {
       hashtagAnimationPending = false;
       document.querySelectorAll(".hashtag-pop").forEach((item) => item.classList.remove("hashtag-pop"));
     }, 950);
-    els.aiDialog.insertBefore(
-      messageElement("這是一個很棒的 HashTag，我已經幫你加到文案裡了", "confirm"),
-      els.aiForm,
-    );
+    els.aiMessages.append(messageElement("這是一個很棒的 HashTag，我已經幫你加到文案裡了", "confirm"));
     scrollAiDialogToBottom();
   }
   els.aiInput.value = "";
@@ -670,7 +718,7 @@ function messageElement(text, type) {
 
 function scrollAiDialogToBottom() {
   window.requestAnimationFrame(() => {
-    els.aiDialog.scrollTop = els.aiDialog.scrollHeight;
+    els.aiMessages.scrollTop = els.aiMessages.scrollHeight;
   });
 }
 
