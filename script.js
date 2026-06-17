@@ -118,7 +118,7 @@ let loaded = false;
 let analyzed = false;
 let activeOutput = "ig";
 let variation = 0;
-let extraHashtagAdded = false;
+let appendedHashtagTexts = [];
 let hashtagAnimationPending = false;
 let publishing = false;
 let assetLoading = false;
@@ -244,6 +244,15 @@ function splitBody(output) {
   return output.body.split("\n").filter((line) => line.trim());
 }
 
+function appendedHashtagText() {
+  return appendedHashtagTexts.join(" ");
+}
+
+function outputBodyWithHashtag(output) {
+  const hashtagText = appendedHashtagText();
+  return hashtagText ? `${output.body}\n\n${hashtagText}` : output.body;
+}
+
 function escapeHtml(value) {
   return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 }
@@ -263,6 +272,14 @@ function reelCaptionFromPrompt(value) {
   return caption || value;
 }
 
+function hashtagTextFromPrompt(value) {
+  const hashtagIndex = value.indexOf("#");
+  if (hashtagIndex === -1) return "";
+
+  const hashtagText = value.slice(hashtagIndex).trim();
+  return hashtagText.length > 1 ? hashtagText : "";
+}
+
 function assetBackground(asset) {
   return `url(${asset.image})`;
 }
@@ -280,16 +297,20 @@ function musicPreviewLine() {
 }
 
 function hashtagChips() {
-  const tags = supportOutput("hashtags").preview.split(" ").filter((tag) => tag.startsWith("#"));
-  if (extraHashtagAdded && !tags.includes("#PerfectCorp")) tags.push("#PerfectCorp");
+  const tags = hashtagPreview().split(" ").filter((tag) => tag.startsWith("#"));
+  const latestHashtagText = appendedHashtagTexts.at(-1) || "";
   return tags
-    .map((tag) => `<span class="${tag === "#PerfectCorp" && hashtagAnimationPending ? "hashtag-pop" : ""}">${tag}</span>`)
+    .map((tag) => {
+      const isLatestTag = latestHashtagText.split(" ").includes(tag);
+      return `<span class="${isLatestTag && hashtagAnimationPending ? "hashtag-pop" : ""}">${escapeHtml(tag)}</span>`;
+    })
     .join("");
 }
 
 function hashtagPreview() {
   const base = supportOutput("hashtags").preview;
-  return extraHashtagAdded && !base.includes("#PerfectCorp") ? `${base} #PerfectCorp` : base;
+  const hashtagText = appendedHashtagText();
+  return hashtagText ? `${base} ${hashtagText}` : base;
 }
 
 function renderIgLayout(output) {
@@ -311,7 +332,7 @@ function renderIgLayout(output) {
         </div>
         <div class="caption-box">
           ${splitBody(output)
-            .map((line) => `<p>${line}</p>`)
+            .map((line) => `<p>${escapeHtml(line)}</p>`)
             .join("")}
           <div class="inline-hashtags">${hashtagChips()}</div>
         </div>
@@ -342,7 +363,7 @@ function renderThreadsLayout(output) {
               <article class="thread-bubble">
                 <span></span>
                 <div>
-                  <p>${line}</p>
+                  <p>${escapeHtml(line)}</p>
                   ${index === 0 ? `<div class="thread-photo" style="background-image:${assetBackground(assets[0])}; background-position:${assetPosition(assets[0])}"></div>` : ""}
                 </div>
                 ${index < lines.length - 1 ? '<i></i>' : ""}
@@ -400,8 +421,10 @@ function renderInfoLayout(output) {
         </div>
       </div>
       <div class="info-lines">
-        ${splitBody(output)
-          .map((line) => `<p>${line}</p>`)
+        ${outputBodyWithHashtag(output)
+          .split("\n")
+          .filter((line) => line.trim())
+          .map((line) => `<p>${escapeHtml(line)}</p>`)
           .join("")}
       </div>
     </div>
@@ -426,7 +449,7 @@ function renderSupportPanel() {
     <div class="support-grid">
       <article>
         <b>Hashtags</b>
-        <p>${hashtagPreview()}</p>
+        <p>${escapeHtml(hashtagPreview())}</p>
       </article>
       <article>
         <b>配樂</b>
@@ -474,7 +497,7 @@ function renderPhoneThreads(output) {
             <article class="phone-thread-item">
               <span></span>
               <div>
-                <p>${line}</p>
+                <p>${escapeHtml(line)}</p>
                 ${index === 0 ? `<div class="phone-thread-photo" style="background-image:${assetBackground(assets[0])}; background-position:${assetPosition(assets[0])}"></div>` : ""}
               </div>
               ${index < lines.length - 1 ? "<i></i>" : ""}
@@ -524,8 +547,10 @@ function renderPhoneInfo(output) {
     </div>
     <div class="phone-info-card">
       <h4>${output.title}</h4>
-      ${splitBody(output)
-        .map((line) => `<p>${line}</p>`)
+      ${outputBodyWithHashtag(output)
+        .split("\n")
+        .filter((line) => line.trim())
+        .map((line) => `<p>${escapeHtml(line)}</p>`)
         .join("")}
     </div>
   `;
@@ -625,7 +650,7 @@ function resetPrototype() {
   assetRevealRun += 1;
   activeOutput = "ig";
   variation = 0;
-  extraHashtagAdded = false;
+  appendedHashtagTexts = [];
   hashtagAnimationPending = false;
   reelFinalCaption = "城市開始發光";
   reelTextAnimating = false;
@@ -676,7 +701,19 @@ els.aiForm.addEventListener("submit", (event) => {
 
   els.aiMessages.append(messageElement(value, "user"));
   scrollAiDialogToBottom();
-  if (activeOutput === "reels") {
+  const hashtagText = hashtagTextFromPrompt(value);
+  if (hashtagText) {
+    appendedHashtagTexts.push(hashtagText);
+    hashtagAnimationPending = true;
+    updateOutput();
+    els.aiDialog.classList.add("open");
+    window.setTimeout(() => {
+      hashtagAnimationPending = false;
+      document.querySelectorAll(".hashtag-pop").forEach((item) => item.classList.remove("hashtag-pop"));
+    }, 950);
+    els.aiMessages.append(messageElement("這是一個很棒的 HashTag，我已經幫你加到文案裡了", "confirm"));
+    scrollAiDialogToBottom();
+  } else if (activeOutput === "reels") {
     reelFinalCaption = reelCaptionFromPrompt(value);
     reelTextAnimating = true;
     reelPreviewLoading = true;
@@ -693,17 +730,6 @@ els.aiForm.addEventListener("submit", (event) => {
       document.querySelectorAll(".reel-updated").forEach((item) => item.classList.remove("reel-updated"));
     }, 2000);
     els.aiMessages.append(messageElement("已更新 Reels 最後一段文案，右側影片會從頭重新播放", "confirm"));
-    scrollAiDialogToBottom();
-  } else if (value.includes("#PerfectCorp")) {
-    extraHashtagAdded = true;
-    hashtagAnimationPending = true;
-    updateOutput();
-    els.aiDialog.classList.add("open");
-    window.setTimeout(() => {
-      hashtagAnimationPending = false;
-      document.querySelectorAll(".hashtag-pop").forEach((item) => item.classList.remove("hashtag-pop"));
-    }, 950);
-    els.aiMessages.append(messageElement("這是一個很棒的 HashTag，我已經幫你加到文案裡了", "confirm"));
     scrollAiDialogToBottom();
   }
   els.aiInput.value = "";
